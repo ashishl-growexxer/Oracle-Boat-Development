@@ -1,0 +1,54 @@
+{
+  "priority_fields": {
+    "po_number": "",  // Unique identifier for the Purchase Order
+    "po_date": "",    // Date when the Purchase Order was issued
+    "due_date": "",   // Date by which the order should be fulfilled or payment is due
+
+    "customer_details": {
+      "buyer_info": "",  // Can include buyer's/customer's name, address, and contact details, always present in header or in larger fonts
+      "bill_to": ""      // Billing address and contact (leave blank if sementic label is absent)
+    },
+
+    "vendor_details":  { // Include vendor's ID, name, address, and contact details
+        "vendor_id": "",
+        "name": "",
+        "address": "",
+        "contact": ""
+    },
+
+    "shipping_details": {
+      "ship_to": "",              // Delivery destination including name, address and contact
+      "ship_from": "",            // Shipping origin – typically vendor's warehouse including name, address and contact
+      "ship_date": "",            // Date the shipment is scheduled or was dispatched
+      "ship_via": ""             // Carrier or shipping method (e.g., FedEx, ground)
+      "shipping_instruction": "" // Special handling or delivery instructions
+    },
+
+    "order_summary": {
+      "total_amount": "",   // Final payable amount including all items and charges
+      "total_quantity": "", // Total quantity of items across the PO
+      "total_weight": ""    // Combined weight of all items in the shipment
+    },
+
+    "line_items": [{
+      "item_number": "",       // Line number or SKU for the item
+      "item_description": "",  // Textual description of the item (e.g., product name)
+      "case_quantity": "",     // Number of cases ordered for the item
+      "bottle_quantity": "",   // Total bottles included for the item in the PO
+      "pack_quantity": "",     // Quantity in packs (if item is packed that way)
+      "size": "",              // Size or volume per item (e.g., 750ml)
+      "weight": "",            // Weight per item or per package
+      "unit_price": "",        // Price per unit/item
+      "total_price": ""        // Total price for the item (no need for calculation)
+    }]
+  },
+
+  "additional_fields": {
+    "field1": "",  // Any extra field not covered in priority_fields, e.g., PO Terms
+    "field2": "",  // Another extra field
+    "line_items": [{
+      "column1": "",  // Additional column info like "Batch No." or "Bottles per Case"
+      "column2": ""   // Another extra item-level attribute
+    }]
+  }
+}

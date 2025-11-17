@@ -13,13 +13,13 @@ security = HTTPBasic()
 # Configure CORS to allow requests from different devices/origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins. For production, specify exact origins: ["http://localhost:3000", "https://yourdomain.com"]
+    allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
+    allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
 
-# Hardcoded credentials (recommended to move to config.ini or env variables)
+# Hardcoded credentials
 EXPECTED_USERNAME = "admin"
 EXPECTED_PASSWORD = "password123"
 

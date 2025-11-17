@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import secrets
 
 # Import your existing logic
@@ -7,6 +9,15 @@ from main import main_logic
 
 app = FastAPI()
 security = HTTPBasic()
+
+# Configure CORS to allow requests from different devices/origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins. For production, specify exact origins: ["http://localhost:3000", "https://yourdomain.com"]
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Hardcoded credentials (recommended to move to config.ini or env variables)
 EXPECTED_USERNAME = "admin"
@@ -26,19 +37,25 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials.username
 
 
-@app.get("/api/run-processing")
-def run_processing(filename: str, username: str = Depends(authenticate)):
+class ProcessingRequest(BaseModel):
+    """Request model for processing endpoint"""
+    filename: str
+
+@app.post("/api/run-processing")
+def run_processing(request: ProcessingRequest, username: str = Depends(authenticate)):
     """
     Processes a single PDF file by filename
     """
     try:
+        filename = request.filename
+        print(f"Received request to process file: {filename}")
         main_logic(filename)
         
         return {
             "status": "Processing completed",
-            "message": f"File {filename} processed successfully.",
+            "message": f"File {request.filename} processed successfully.",
             "user": username,
-            "filename": filename
+            "filename": request.filename
         }
 
     except Exception as e:

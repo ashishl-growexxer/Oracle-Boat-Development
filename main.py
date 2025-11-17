@@ -81,7 +81,7 @@ def upload_file_to_csv_folder(filename):
     
     # Get just the filename from path
     actual_filename = os.path.basename(filename)
-    object_name = f"csv/{actual_filename}"
+    object_name = f"csv-ps/{actual_filename}"
     
     response = client.put_object(
         namespace_name=bucket_info['namespace'],

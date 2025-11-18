@@ -300,7 +300,7 @@ class OCIModel:
         images: List[Image.Image],
         prompt: str,
         max_tokens: int = None,
-        temperature: float = 1,
+        temperature: float = 0.2,
         frequency_penalty: float = 0,
         presence_penalty: float = 0,
         top_p: float = 0.75

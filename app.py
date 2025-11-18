@@ -3,6 +3,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import secrets
+import traceback
 
 # Import your existing logic
 from main import main_logic
@@ -59,6 +60,7 @@ def run_processing(request: ProcessingRequest, username: str = Depends(authentic
         }
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=str(e)

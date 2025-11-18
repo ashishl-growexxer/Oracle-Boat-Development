@@ -39,7 +39,7 @@ def get_pdf_files_from_bucket():
     response = client.list_objects(
         namespace_name=namespace,
         bucket_name=bucket_name,
-        prefix="pdf/"
+        prefix=f"pdf/"
     )
     
     file_names = []

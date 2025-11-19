@@ -1,7 +1,12 @@
+"""
+This module defines the `QueryManager` class, which encapsulates SQL queries
+for interacting with purchase order (PO) related tables in a database.
+"""
 
-
-class QueryManager:
+class QueryManager(object):
+    """Manages SQL queries for purchase order (PO) header and line item insertions, and other database operations."""
     def __init__(self):
+        """Initializes the QueryManager with predefined SQL queries."""
         self.select_all = """
             SELECT PO_NAME, START_TIME, END_TIME, EXTRACTED_JSON FROM j_purchaseorder
         """
@@ -56,6 +61,12 @@ class QueryManager:
         """
 
     def get_insertion_queries(self):
+        """Returns a dictionary containing the SQL queries for inserting PO header and line items.
+
+        Returns:
+            dict: A dictionary with keys 'insert_po_header_sql' and 'insert_po_line_items_sql'
+                  mapping to their respective SQL query strings.
+        """
         return {
             "insert_po_header_sql":self.insert_po_header_sql,
             "insert_po_line_items_sql":self.insert_po_line_items_sql
@@ -65,9 +76,9 @@ class QueryManager:
 
 
 
-# Header_ fields 
+# Header_ fields
 # CREATE TABLE PO_HEADER_DETAILS (
-#     serial_no              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,    
+#     serial_no              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 #     po_number              VARCHAR2(100),
 #     po_date                DATE,
 #     due_date               DATE,

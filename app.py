@@ -1,3 +1,6 @@
+"""
+This module contains a FastAPI application for processing files with basic authentication.
+"""
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,10 +17,10 @@ security = HTTPBasic()
 # Configure CORS to allow requests from different devices/origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Hardcoded credentials
@@ -25,7 +28,18 @@ EXPECTED_USERNAME = "admin"
 EXPECTED_PASSWORD = "password123"
 
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    """Basic Authentication validator"""
+    """
+    Authenticates users based on HTTP Basic credentials.
+
+    Args:
+        credentials (HTTPBasicCredentials): The credentials provided in the request.
+
+    Returns:
+        str: The username if authentication is successful.
+
+    Raises:
+        HTTPException: If the username or password is invalid.
+    """
     correct_username = secrets.compare_digest(credentials.username, EXPECTED_USERNAME)
     correct_password = secrets.compare_digest(credentials.password, EXPECTED_PASSWORD)
 
@@ -45,13 +59,22 @@ class ProcessingRequest(BaseModel):
 @app.post("/api/run-processing")
 def run_processing(request: ProcessingRequest, username: str = Depends(authenticate)):
     """
-    Processes a single PDF file by filename
+    Processes a single PDF file by filename.
+
+    Args:
+        request (ProcessingRequest): The request body containing the filename.
+        username (str): The authenticated username.
+
+    Returns:
+        dict: A dictionary indicating the status of the processing.
+
+    Raises:
+        HTTPException: If an error occurs during processing.
     """
     try:
         filename = request.filename
         print(f"Received request to process file: {filename}")
         main_logic(filename)
-        
         return {
             "status": "Processing completed",
             "message": f"File {request.filename} processed successfully.",

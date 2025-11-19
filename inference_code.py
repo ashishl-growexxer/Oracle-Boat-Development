@@ -1,3 +1,7 @@
+"""
+This is Inference code used for Declaring OCI MOdel whose function,
+is to infer from LLM and return appropriate response.
+"""
 import oci
 import base64
 import time
@@ -11,18 +15,46 @@ import json
 import traceback
 import re
 
+def safe_get(obj, key, default=None):
+    """Get key from dict or attribute from object."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default) if hasattr(obj, key) else default
+
+def load_if_json(obj):
+    """Decode JSON string if applicable."""
+    if isinstance(obj, str):
+        try:
+            return json.loads(obj)
+        except json.JSONDecodeError:
+            return obj
+    return obj
+
+def first_or_none(item):
+    """Return first element if list, else item."""
+    if isinstance(item, list):
+        return item[0] if item else None
+    return item
+
+def  prepare_token_usage(usage):
+    """Prepare token usage dictionary."""
+    return {
+        "prompt_tokens": usage.get("prompt_tokens") if isinstance(usage, dict)
+        else getattr(usage, 'prompt_tokens', None),
+        "completion_tokens": usage.get("completion_tokens") if isinstance(usage, dict)
+        else getattr(usage, 'completion_tokens', None),
+        "total_tokens": usage.get("total_tokens") if isinstance(usage, dict)
+        else getattr(usage, 'total_tokens', None),
+    }
 
 
-
-class OCIModel:
+class OCIModel(object):
     """
     OCI Generative AI model interface with memory management.
-    
     Follows the same pattern as BedrockModel for consistency.
     Supports both normal inference and image-based inference with proper
     resource cleanup for images and buffers.
     """
-    
     def __init__(
         self,
         config_path: str = None,
@@ -33,7 +65,6 @@ class OCIModel:
     ):
         """
         Initialize OCI Generative AI model interface.
-        
         Args:
             config_path: Path to OCI config file (default: ~/.oci/config)
             model_id: OCI model identifier/OCID
@@ -43,48 +74,44 @@ class OCIModel:
         """
         self.config_profile = config_profile
         self.config_path = "./config.ini"
-        self.model_id = "ocid1.generativeaimodel.oc1.us-chicago-1.amaaaaaask7dceyayjawvuonfkw2ua4bob4rlnnlhs522pafbglivtwlfzta"
+        self.model_id = (
+            "ocid1.generativeaimodel.oc1.us-chicago-1."
+            "amaaaaaask7dceyayjawvuonfkw2ua4bob4rlnnlhs522pafbglivtwlfzta"
+        )
         self.compartment_id = "ocid1.compartment.oc1..aaaaaaaa7wyo7euk2wfekpv36obtfbqgupxeb5yylivifscxseudvwwp2ixa"
-        
         # Load configuration
         self.config = self._load_config()
         self.max_tokens = self.config.get("max_tokens", 4096)
-        
         # Initialize client
         self.client = self._initialize_client(endpoint)
-    
-    def _load_config(self) -> Dict[str, Any]:
+
+    @staticmethod
+    def _load_config() -> Dict[str, Any]:
         """
         Load OCI configuration.
-        
         Returns:
             dict: OCI configuration parameters
         """
         print("Loading OCI Generative AI configuration")
         return {
-            "max_tokens": 4096,  # Default max tokens
-            "timeout": (10, 240),  # (connect_timeout, read_timeout)
+            "max_tokens": 4096,
+            "timeout": (10, 240),
         }
-    
+
     def _initialize_client(self, endpoint: str = None) -> oci.generative_ai_inference.GenerativeAiInferenceClient:
         """
         Initialize OCI Generative AI Inference client.
-        
         Args:
             endpoint: Optional service endpoint (uses default if not provided)
-        
         Returns:
             oci.generative_ai_inference.GenerativeAiInferenceClient: Configured OCI client
         """
         print("Initializing OCI Generative AI Inference client")
-        
         # Load OCI config
         oci_config = oci.config.from_file(self.config_path, self.config_profile)
-        
         # Default endpoint if not provided
         if endpoint is None:
             endpoint = "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com"
-        
         # Create client with retry strategy and timeout
         client = oci.generative_ai_inference.GenerativeAiInferenceClient(
             config=oci_config,
@@ -92,151 +119,93 @@ class OCIModel:
             retry_strategy=oci.retry.NoneRetryStrategy(),
             timeout=self.config["timeout"]
         )
-        
         return client
-    
-    def _encode_image_to_base64(self, pil_image: Image.Image) -> str:
+
+    @staticmethod
+    def extract_text(input_text):
+        if isinstance(input_text, str):
+            return input_text
+        else:
+            return str(input_text)
+
+    def _extract_text_from_response(self,chat_response) -> str:
         """
-        Convert PIL image to base64 string.
-        
-        This follows the same pattern as BaseModel._encode_image_to_base64()
-        in the codebase for consistency.
-        
-        Args:
-            pil_image: PIL Image object
-        
-        Returns:
-            str: Base64 encoded image string
+        Extract text content from OCI chat response with reduced cognitive complexity.
+        SonarQube-friendly: only one return, fewer branches.
         """
-        buffer = BytesIO()
+
+
+        result = ""
+
         try:
-            pil_image.save(buffer, format="PNG")
-            base64_str = base64.b64encode(buffer.getvalue()).decode()
-            return base64_str
-        finally:
-            if buffer and not buffer.closed:
-                buffer.close()
-    
-    def _extract_text_from_response(self, chat_response) -> str:
-        """
-        Extract text content from OCI chat response.
-        
-        Similar to BedrockModel._extract_text_from_response().
-        
-        Args:
-            chat_response: OCI chat response object
-        
-        Returns:
-            str: Extracted text content
-        """
-        try:
-            response_data = chat_response.data
-            
-            # Handle if response_data is a JSON string (as seen in response_output.txt)
-            if isinstance(response_data, str):
-                try:
-                    response_data = json.loads(response_data)
-                except json.JSONDecodeError:
-                    # If it's not valid JSON, return as-is
-                    return response_data
-            
-            # Handle if response_data is a dict (from vars() or similar)
-            if isinstance(response_data, dict):
-                chat_response_data = response_data.get("chat_response", {})
-            else:
-                chat_response_data = response_data.chat_response if hasattr(response_data, 'chat_response') else response_data
-            
-            # Extract choices
-            if isinstance(chat_response_data, dict):
-                choices = chat_response_data.get("choices", [])
-            else:
-                choices = chat_response_data.choices if hasattr(chat_response_data, 'choices') else []
-            
-            if not choices:
-                return ""
-            
-            # Get first choice
-            first_choice = choices[0] if isinstance(choices, list) else choices
-            
-            # Extract message
-            if isinstance(first_choice, dict):
-                message = first_choice.get("message", {})
-            else:
-                message = first_choice.message if hasattr(first_choice, 'message') else {}
-            
-            # Extract content
-            if isinstance(message, dict):
-                content_list = message.get("content", [])
-            else:
-                content_list = message.content if hasattr(message, 'content') else []
-            
-            if not content_list:
-                return ""
-            
-            # Get first content item
-            first_content = content_list[0] if isinstance(content_list, list) else content_list
-            
-            # Extract text
-            if isinstance(first_content, dict):
-                text = first_content.get("text", "")
-            else:
-                text = first_content.text if hasattr(first_content, 'text') else ""
-            
-            return text if isinstance(text, str) else str(text)
-            
+            data = load_if_json(chat_response.data)
+
+            chat_data = safe_get(data, "chat_response", data)
+            choices = safe_get(chat_data, "choices", [])
+
+            first_choice = first_or_none(choices)
+            if first_choice is None:
+                return result
+
+            message = safe_get(first_choice, "message", {})
+            content_list = safe_get(message, "content", [])
+
+            first_content = first_or_none(content_list)
+            if first_content is None:
+                return result
+
+            text = safe_get(first_content, "text", "")
+            result = self.extract_text(text)
+
+
         except Exception as e:
-            print(f"Error extracting text from response: {e}")
-            return ""
-    
+            # swallow and return default result
+            print(f"Encountered Error {e}")
+
+        return result
+
     def _clean_and_parse_json(self, text: str) -> Dict[str, Any]:
         """
-        Clean and parse JSON response from LLAMA model.
-        
-        Removes markdown code blocks and parses JSON string.
-        Similar to ExtractionService._clean_and_parse_json().
-        
-        Args:
-            text: Raw text response from LLAMA (may contain markdown code blocks)
-        
-        Returns:
-            dict: Parsed JSON object or error dict
+        Clean and parse JSON response from LLAMA model with SonarQube-friendly structure.
         """
+
+        result: Dict[str, Any] = {}   # <-- single return value container
+
         if not text:
-            return {"error": "Empty response from LLAMA model"}
-        
-        # Handle if text is a JSON string that needs parsing first
+            result = {"error": "Empty response from LLAMA model"}
+            return result
+
+        # Try parsing top-level JSON first
         try:
-            # Try to parse as JSON string first (in case response.data is a JSON string)
             parsed = json.loads(text)
             if isinstance(parsed, dict) and "chat_response" in parsed:
-                # Extract the actual text from nested structure
-                text = self._extract_text_from_response(type('obj', (object,), {'data': parsed})())
+                obj = type("obj", (object,), {"data": parsed})
+                text = self._extract_text_from_response(obj())
         except (json.JSONDecodeError, AttributeError):
-            # Not a JSON string, use text as-is
             pass
-        
-        # Clean response - remove markdown code blocks
-        # Pattern matches: ```json\n at start and \n``` at end
+
+        # Remove markdown fenced code blocks
         json_text = re.sub(r"^```json\s*\n|\n\s*```$", "", text, flags=re.MULTILINE).strip()
-        
-        # Also handle cases where there might be just ``` without json
         json_text = re.sub(r"^```\s*\n|\n\s*```$", "", json_text, flags=re.MULTILINE).strip()
-        
-        # Validate content
+
         if not json_text:
+            msg = "LLAMA extraction failed: Empty response after processing"
             print("LLAMA returned empty response after cleaning")
-            return {"error": "LLAMA extraction failed: Empty response after processing"}
-        
-        # Parse JSON
+            result = {"error": msg}
+            return result
+
+        # Try final JSON parse
         try:
             cleaned_json = json.loads(json_text)
-            return {"cleaned_json": cleaned_json}
+            result = {"cleaned_json": cleaned_json}
         except json.JSONDecodeError as e:
             print(f"Failed to parse LLAMA response as JSON: {e}")
-            preview = json_text
-            print(f"Raw response preview: {preview}...")
-            return {"error": f"LLAMA extraction failed: Invalid JSON response - {str(e)}"}
-    
+            print(f"Raw response preview: {json_text}...")
+            result = {"error": f"LLAMA extraction failed: Invalid JSON response - {str(e)}"}
+
+        return result
+
+
     def _format_oci_response(
         self,
         chat_response,
@@ -246,31 +215,25 @@ class OCIModel:
     ) -> Dict[str, Any]:
         """
         Format OCI response with data, token usage, and timing.
-        
         Similar to BedrockModel._format_bedrock_response().
-        
         Args:
             chat_response: OCI chat response object
             start_time: Start time for calculating response time
             end_time: End time for calculating response time
             validate_empty: Whether to validate for empty response
-        
         Returns:
             dict: Formatted response dictionary with cleaned JSON
         """
         # Extract text from response
         raw_text = self._extract_text_from_response(chat_response)
-        
         # Validate response
         if validate_empty and not raw_text:
             print("OCI returned empty response")
             return {"error": "Empty response from OCI model"}
-        
         # Clean and parse JSON
         parse_result = self._clean_and_parse_json(raw_text)
         if "error" in parse_result:
             return parse_result
-        
         # Extract token usage from response
         token_usage = {}
         try:
@@ -278,19 +241,19 @@ class OCIModel:
             if isinstance(response_data, dict):
                 usage = response_data.get("chat_response", {}).get("usage", {})
             else:
-                usage = response_data.chat_response.usage if hasattr(response_data, 'chat_response') and hasattr(response_data.chat_response, 'usage') else {}
-            
+                has_chat_resp = hasattr(response_data, "chat_response")
+                has_usage = has_chat_resp and hasattr(response_data.chat_response, "usage")
+                usage = (
+                    response_data.chat_response.usage
+                    if has_usage
+                    else {}
+                )
             if usage:
-                token_usage = {
-                    "prompt_tokens": usage.get("prompt_tokens") if isinstance(usage, dict) else getattr(usage, 'prompt_tokens', None),
-                    "completion_tokens": usage.get("completion_tokens") if isinstance(usage, dict) else getattr(usage, 'completion_tokens', None),
-                    "total_tokens": usage.get("total_tokens") if isinstance(usage, dict) else getattr(usage, 'total_tokens', None),
-                }
+                token_usage = prepare_token_usage(usage)
         except Exception as e:
             print(f"Could not extract token usage: {e}")
-        
         return {
-            "data": parse_result["cleaned_json"],  # Return parsed JSON object, not string
+            "data": parse_result["cleaned_json"],
             "token_usage": token_usage,
             "response_time_seconds": round(end_time - start_time, 2),
         }
@@ -307,10 +270,8 @@ class OCIModel:
     ) -> Dict[str, Any]:
         """
         Run inference on pre-converted images (PIL Image objects).
-        
         This follows the same pattern as BedrockModel.infer_with_images() for consistency.
         The function processes PIL Images, encodes them to base64, and sends them to OCI.
-        
         Args:
             images: List of PIL Image objects
             prompt: Prompt text
@@ -319,42 +280,29 @@ class OCIModel:
             frequency_penalty: Frequency penalty
             presence_penalty: Presence penalty
             top_p: Top-p sampling parameter
-        
         Returns:
             dict: Model response with data, response_time_seconds, or error
         """
         print("Running OCI Generative AI inference with images")
-        
         if not images:
             return {"error": "No images provided"}
-        
         if max_tokens is None:
             max_tokens = self.max_tokens
-        
         buffers = []
-        
         try:
             chat_detail = oci.generative_ai_inference.models.ChatDetails()
-
-
             print(f"Processing {len(images)} images")
             # Create chat detail
-            
             content_list = []
-            
             text_content = oci.generative_ai_inference.models.TextContent()
             text_content.text = prompt
             content_list.append(text_content)
-            
-
             messages = []
             # Create message
             message = oci.generative_ai_inference.models.Message()
             message.role = "USER"
             message.content = content_list
-
             messages.append(message)
-            
             # Add each image (following Bedrock pattern: iterate through images)
             for page_num, image in enumerate(images, start=1):
                 buffer = BytesIO()
@@ -364,33 +312,24 @@ class OCIModel:
                     image.save(buffer, format="JPEG")
                     buffer.seek(0)
                     image_bytes = buffer.getvalue()
-                    
                     image_base64 = base64.b64encode(image_bytes).decode()
                     print(f"Added image {page_num} to content (size: {len(image_bytes)} bytes)")
-
                     image_content = oci.generative_ai_inference.models.ImageContent()
-                    # image_content.type = 'IMAGE'
                     given_image_url = oci.generative_ai_inference.models.ImageUrl()
-                    given_image_url.url =  f"data:image/png;base64,{image_base64}"  # base64 string (SDK converts to bytes)
-
+                    given_image_url.url =  f"data:image/png;base64,{image_base64}"
                     image_content.image_url = given_image_url
-
                     image_message = oci.generative_ai_inference.models.Message()
                     image_message.role = "USER"
                     image_message.content = [image_content]
-                    
                     messages.append(image_message)
-                    
                 except Exception as e:
                     print(f"Failed to process page {page_num}: {e}")
                     continue
-            
             # Create message (same structure as Bedrock)
             message = oci.generative_ai_inference.models.Message()
             message.role = "USER"
             message.content = content_list
             messages.append(message)
-            
             # Create chat request
             chat_request = oci.generative_ai_inference.models.GenericChatRequest()
             chat_request.api_format = oci.generative_ai_inference.models.BaseChatRequest.API_FORMAT_GENERIC
@@ -400,35 +339,19 @@ class OCIModel:
             chat_request.frequency_penalty = frequency_penalty
             chat_request.presence_penalty = presence_penalty
             chat_request.top_p = top_p
-            
             # Set serving mode
             chat_detail.serving_mode = oci.generative_ai_inference.models.OnDemandServingMode(model_id=self.model_id)
             chat_detail.chat_request = chat_request
             chat_detail.compartment_id = self.compartment_id
-            
             # Call OCI API (using self.client like BedrockModel)
             start_time = time.time()
             chat_response = self.client.chat(chat_detail)
             end_time = time.time()
-
-            try:
-                return self._format_oci_response(
-                    chat_response, start_time, end_time, validate_empty=True
-                )
-                
-            except Exception as e:
-                print(f"Error formatting response: {e}")
-                return {
-                    "data": str(chat_response),
-                    "response_time_seconds": end_time - start_time,
-                    "full_response": vars(chat_response)
-                }
-        
+            return self._format_oci_response(chat_response, start_time, end_time, validate_empty=True)
         except Exception as e:
             print(f"OCI image inference error: {e}")
             traceback.print_exc()
             return {"error": str(e)}
-        
         finally:
             # Cleanup resources - but DON'T close images as they may be reused (same as Bedrock)
             for buffer in buffers:
@@ -439,7 +362,4 @@ class OCIModel:
                     print(f"Failed to close buffer: {e}")
             print("Cleaned up buffer resources")
             # Note: Images are NOT cleaned up here as they may be reused (same pattern as Bedrock)
-
-
-
 
